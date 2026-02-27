@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Water Flow Problem Visualization</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            margin: 0;
+        }
+        h1 {
+            color: #333;
+        }
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 20px;
+            max-width: 1200px;
+            width: 100%;
+        }
+        .canvas-container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        canvas {
+            border: 1px solid #ddd;
+            background-color: #fafafa;
+        }
+        .controls {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        button.reset {
+            background-color: #6c757d;
+        }
+        button.reset:hover {
+            background-color: #545b62;
+        }
+        .info-panel {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            max-width: 400px;
+            width: 100%;
+        }
+        .problem-statement {
+            margin-bottom: 20px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        .stats {
+            font-size: 1.1em;
+        }
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 10px 0;
+        }
+        .value {
+            font-weight: bold;
+            color: #007bff;
+        }
+        .math-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #007bff;
+            padding: 10px;
+            margin-top: 10px;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Water Flow Visualization</h1>
+
+    <div class="container">
+        <div class="canvas-container">
+            <canvas id="simCanvas" width="600" height="500"></canvas>
+            <div class="controls">
+                <button id="startBtn">Start</button>
+                <button id="pauseBtn">Pause</button>
+                <button id="resetBtn" class="reset">Reset</button>
+            </div>
+        </div>
+
+        <div class="info-panel">
+            <div class="problem-statement">
+                <h3>Problem:</h3>
+                <p>Water flows through a cylindrical pipe of internal diameter <strong>2 cm</strong>, into a cylindrical tank of base radius <strong>40 cm</strong>, at <strong>0.4 m/s</strong>.</p>
+                <p>Determine the rise in water level in the tank in <strong>30 minutes</strong>.</p>
+            </div>
+
+            <div class="solution">
+                <h3>Solution:</h3>
+                <div class="math-box">
+                    <strong>Pipe Radius (r):</strong> 1 cm = 0.01 m<br>
+                    <strong>Flow Rate (v):</strong> 0.4 m/s<br>
+                    <strong>Tank Radius (R):</strong> 40 cm = 0.4 m<br>
+                    <strong>Time (t):</strong> 30 min = 1800 s<br><br>
+                    Volume In = π * r² * v * t<br>
+                    Volume In = π * (0.01)² * 0.4 * 1800<br>
+                    Volume In = 0.072π m³<br><br>
+                    Rise in Level (h) = Volume / (π * R²)<br>
+                    h = 0.072π / (π * 0.4²)<br>
+                    h = 0.072 / 0.16<br>
+                    <strong>h = 0.45 m = 45 cm</strong>
+                </div>
+            </div>
+
+            <div class="stats">
+                <h3>Live Stats:</h3>
+                <div class="stat-row">
+                    <span>Elapsed Time:</span>
+                    <span id="timeDisplay" class="value">00:00</span>
+                </div>
+                <div class="stat-row">
+                    <span>Water Level Rise:</span>
+                    <span id="levelDisplay" class="value">0.00 cm</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        const startBtn = document.getElementById('startBtn');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const timeDisplay = document.getElementById('timeDisplay');
+        const levelDisplay = document.getElementById('levelDisplay');
+
+        // Problem Constants
+        const TARGET_TIME = 1800; // 30 minutes in seconds
+        const FINAL_HEIGHT_CM = 45; // Calculated result
+
+        // Simulation State
+        let currentTime = 0; // in simulation seconds
+        let isRunning = false;
+        let animationId;
+        const SIMULATION_SPEED = 180; // 1 real second = 180 simulation seconds (10s total duration)
+        let lastTimestamp = 0;
+
+        // Visual Constants
+        const TANK_X = 300;
+        const TANK_Y = 400;
+        const TANK_WIDTH = 250; // Visual width
+        const TANK_HEIGHT = 300; // Visual height
+        const PIPE_X = TANK_X - 80;
+        const PIPE_Y = TANK_Y - TANK_HEIGHT - 50;
+        const PIPE_WIDTH = 20;
+        const PIPE_LENGTH = 100;
+
+        // Water Animation
+        let particles = [];
+
+        function init() {
+            resizeCanvas();
+            draw();
+            updateStats();
+        }
+
+        function resizeCanvas() {
+            // Keep fixed size for simplicity in logic, CSS handles scaling if needed
+        }
+
+        function formatTime(seconds) {
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        }
+
+        function updateStats() {
+            timeDisplay.textContent = formatTime(currentTime);
+            const currentHeightCm = (currentTime / TARGET_TIME) * FINAL_HEIGHT_CM;
+            levelDisplay.textContent = currentHeightCm.toFixed(2) + ' cm';
+        }
+
+        function drawTank() {
+            ctx.save();
+            // Tank Body
+            ctx.strokeStyle = '#555';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(TANK_X - TANK_WIDTH/2, TANK_Y - TANK_HEIGHT);
+            ctx.lineTo(TANK_X - TANK_WIDTH/2, TANK_Y);
+            ctx.lineTo(TANK_X + TANK_WIDTH/2, TANK_Y);
+            ctx.lineTo(TANK_X + TANK_WIDTH/2, TANK_Y - TANK_HEIGHT);
+            ctx.stroke();
+
+            // Tank Top Rim (Elliptical)
+            ctx.beginPath();
+            ctx.ellipse(TANK_X, TANK_Y - TANK_HEIGHT, TANK_WIDTH/2, 20, 0, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Tank Bottom (Elliptical)
+            ctx.beginPath();
+            ctx.ellipse(TANK_X, TANK_Y, TANK_WIDTH/2, 20, 0, 0, Math.PI, false); // Bottom half visible
+            ctx.stroke();
+
+            // Labels
+            ctx.fillStyle = '#333';
+            ctx.font = '14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Tank (r = 40cm)', TANK_X, TANK_Y + 40);
+
+            // Measurement markings
+            ctx.textAlign = 'left';
+            ctx.font = '12px Arial';
+            ctx.fillStyle = '#888';
+            for(let i=0; i<=5; i++) {
+                let y = TANK_Y - (i * (TANK_HEIGHT * 0.8) / 5); // Use 80% of visual height for 45cm
+                let val = i * 9; // 0, 9, 18, 27, 36, 45
+                ctx.fillText(val + ' cm', TANK_X + TANK_WIDTH/2 + 10, y + 5);
+                ctx.beginPath();
+                ctx.moveTo(TANK_X + TANK_WIDTH/2, y);
+                ctx.lineTo(TANK_X + TANK_WIDTH/2 + 5, y);
+                ctx.stroke();
+            }
+
+            ctx.restore();
+        }
+
+        function drawPipe() {
+            ctx.save();
+            ctx.fillStyle = '#aaa';
+            ctx.strokeStyle = '#666';
+            ctx.lineWidth = 2;
+
+            // Pipe pointing down
+            // For visual interest, let's make it an elbow or just a straight pipe entering from top
+            // Let's do a pipe coming from left and pouring into tank
+
+            const pX = TANK_X - 60; // Pouring position
+            const pY = TANK_Y - TANK_HEIGHT - 40; // Height of pipe exit
+
+            // Horizontal part
+            ctx.fillRect(pX - 100, pY - 10, 100, 20);
+            ctx.strokeRect(pX - 100, pY - 10, 100, 20);
+
+            // Label
+            ctx.fillStyle = '#333';
+            ctx.font = '14px Arial';
+            ctx.textAlign = 'right';
+            ctx.fillText('Pipe (d = 2cm)', pX - 110, pY + 5);
+            ctx.fillText('v = 0.4 m/s', pX - 110, pY + 25);
+
+            ctx.restore();
+        }
+
+        function drawWater() {
+            const fillRatio = currentTime / TARGET_TIME;
+            // Max visual height for 45cm is arbitrary but let's say it takes up 80% of tank height
+            const maxVisualWaterHeight = TANK_HEIGHT * 0.8;
+            const currentVisualWaterHeight = maxVisualWaterHeight * fillRatio;
+
+            // 1. Water in Tank
+            if (currentTime > 0) {
+                ctx.save();
+                ctx.fillStyle = 'rgba(0, 119, 255, 0.6)';
+
+                const waterTopY = TANK_Y - currentVisualWaterHeight;
+
+                // Draw water body
+                ctx.beginPath();
+                ctx.moveTo(TANK_X - TANK_WIDTH/2, TANK_Y);
+                ctx.lineTo(TANK_X - TANK_WIDTH/2, waterTopY);
+                // Top surface
+                ctx.ellipse(TANK_X, waterTopY, TANK_WIDTH/2, 20, 0, Math.PI, 0, false); // Top half
+                ctx.ellipse(TANK_X, waterTopY, TANK_WIDTH/2, 20, 0, 0, Math.PI, false); // Bottom half
+                ctx.lineTo(TANK_X + TANK_WIDTH/2, TANK_Y);
+                // Bottom curve matches tank bottom
+                ctx.ellipse(TANK_X, TANK_Y, TANK_WIDTH/2, 20, 0, 0, Math.PI, false);
+                ctx.fill();
+
+                // Top surface highlight
+                ctx.fillStyle = 'rgba(0, 150, 255, 0.8)';
+                ctx.beginPath();
+                ctx.ellipse(TANK_X, waterTopY, TANK_WIDTH/2, 20, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // 2. Falling Water (Stream)
+            if (isRunning && currentTime < TARGET_TIME) {
+                ctx.save();
+                const pX = TANK_X - 60; // Pipe exit X
+                const pY = TANK_Y - TANK_HEIGHT - 30; // Pipe exit Y (slightly lower than rect)
+                const waterTopY = TANK_Y - currentVisualWaterHeight;
+
+                // Create particles or just a stream
+                // Simple stream
+                ctx.fillStyle = 'rgba(0, 119, 255, 0.8)';
+                ctx.beginPath();
+                // Stream widens slightly as it falls? No, keep it simple
+                ctx.rect(pX - 5, pY, 10, waterTopY - pY + 10); // +10 to blend into water surface
+                ctx.fill();
+
+                // Add some "flow" lines
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+                ctx.beginPath();
+                const offset = (Date.now() / 10) % 20;
+                ctx.setLineDash([10, 10]);
+                ctx.lineDashOffset = -offset;
+                ctx.moveTo(pX, pY);
+                ctx.lineTo(pX, waterTopY);
+                ctx.stroke();
+
+                ctx.restore();
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawTank();
+            drawPipe();
+            drawWater();
+        }
+
+        function loop(timestamp) {
+            if (!isRunning) return;
+
+            if (!lastTimestamp) lastTimestamp = timestamp;
+            const delta = (timestamp - lastTimestamp) / 1000; // seconds
+            lastTimestamp = timestamp;
+
+            // Update simulation time
+            currentTime += delta * SIMULATION_SPEED;
+
+            if (currentTime >= TARGET_TIME) {
+                currentTime = TARGET_TIME;
+                isRunning = false;
+                startBtn.disabled = false;
+                startBtn.textContent = "Finished";
+            }
+
+            draw();
+            updateStats();
+
+            if (isRunning) {
+                animationId = requestAnimationFrame(loop);
+            }
+        }
+
+        startBtn.addEventListener('click', () => {
+            if (currentTime >= TARGET_TIME) {
+                currentTime = 0;
+            }
+            if (!isRunning) {
+                isRunning = true;
+                lastTimestamp = 0;
+                startBtn.disabled = true;
+                pauseBtn.disabled = false;
+                animationId = requestAnimationFrame(loop);
+            }
+        });
+
+        pauseBtn.addEventListener('click', () => {
+            if (isRunning) {
+                isRunning = false;
+                cancelAnimationFrame(animationId);
+                startBtn.disabled = false;
+                startBtn.textContent = "Resume";
+                pauseBtn.disabled = true;
+            }
+        });
+
+        resetBtn.addEventListener('click', () => {
+            isRunning = false;
+            cancelAnimationFrame(animationId);
+            currentTime = 0;
+            startBtn.disabled = false;
+            startBtn.textContent = "Start";
+            pauseBtn.disabled = false; // "Reset" usually clears everything, pause is irrelevant until started
+            draw();
+            updateStats();
+        });
+
+        // Initial Draw
+        init();
+
+    </script>
+</body>
+</html>
